@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/search_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F9FAFB"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp">
+
+    <TextView
+        android:id="@+id/search_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Search"
+        android:textStyle="bold"
+        android:textSize="28sp"
+        android:textColor="#111827"
+        android:paddingTop="4dp"
+        android:paddingBottom="12dp" />
+
+    <LinearLayout
+        android:id="@+id/search_content_row"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <!-- Left: query + keyboard -->
+        <LinearLayout
+            android:id="@+id/keyboard_panel"
+            android:layout_width="560dp"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:paddingEnd="16dp">
+
+            <TextView
+                android:id="@+id/search_query_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Search…"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:textColor="#111827"
+                android:paddingBottom="10dp" />
+
+            <TextView
+                android:id="@+id/search_hint_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Type using the keyboard to search by title or category."
+                android:textSize="16sp"
+                android:textColor="#64748B"
+                android:paddingBottom="12dp" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/keyboard_recycler"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:paddingBottom="8dp" />
+
+            <TextView
+                android:id="@+id/search_keyboard_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="DPAD: OK type • Right to results • Back deletes / exits"
+                android:textSize="14sp"
+                android:textColor="#64748B"
+                android:paddingTop="8dp" />
+        </LinearLayout>
+
+        <!-- Right: results -->
+        <LinearLayout
+            android:id="@+id/results_panel"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/results_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Results"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#111827"
+                android:paddingBottom="10dp" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/results_recycler"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:paddingBottom="8dp" />
+
+            <TextView
+                android:id="@+id/search_results_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="DPAD: Left returns to keyboard • OK opens details"
+                android:textSize="14sp"
+                android:textColor="#64748B"
+                android:paddingTop="8dp" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

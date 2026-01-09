@@ -5,18 +5,21 @@ import androidx.fragment.app.FragmentActivity
 import com.example.frontend_android_tv_app.data.Video
 import com.example.frontend_android_tv_app.ui.screens.HomeFragment
 import com.example.frontend_android_tv_app.ui.screens.PlayerFragment
+import com.example.frontend_android_tv_app.ui.screens.SearchFragment
 import com.example.frontend_android_tv_app.ui.screens.VideoDetailsFragment
 
 /**
  * Main Activity for Android TV app.
  *
- * Hosts 3 internal screens (Fragments):
+ * Hosts internal screens (Fragments):
  * - Home: browse category rows and thumbnails
+ * - Search: DPAD on-screen keyboard + live results
  * - VideoDetails: show metadata and a Play button
  * - Player: video playback with DPAD controls + overlay
  */
 class MainActivity : FragmentActivity(),
     HomeFragment.Host,
+    SearchFragment.Host,
     VideoDetailsFragment.Host,
     PlayerFragment.Host {
 
@@ -35,6 +38,15 @@ class MainActivity : FragmentActivity(),
         supportFragmentManager.beginTransaction()
             .replace(R.id.screen_container, VideoDetailsFragment.newInstance(video))
             .addToBackStack("details")
+            .commit()
+    }
+
+    // PUBLIC_INTERFACE
+    override fun openSearch() {
+        /** Open the Search screen from Home. */
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.screen_container, SearchFragment())
+            .addToBackStack("search")
             .commit()
     }
 

@@ -5,6 +5,7 @@ import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -25,6 +26,7 @@ import kotlinx.coroutines.launch
  * Adds:
  * - Optional Continue Watching row at the top (local-only, based on saved playback progress).
  * - Optional Favorites row near the top (after Continue Watching if present).
+ * - Search entry in the top bar.
  *
  * DPAD navigation:
  * - Left/Right: move within row (wrap-around)
@@ -45,10 +47,14 @@ class HomeFragment : Fragment() {
             rowVideoIds: ArrayList<String>,
             currentIndex: Int
         )
+
+        // PUBLIC_INTERFACE
+        fun openSearch()
     }
 
     private lateinit var rowsRecycler: RecyclerView
     private lateinit var adapter: CategoryRowsAdapter
+    private lateinit var btnOpenSearch: Button
 
     private lateinit var progressStore: ProgressStore
     private lateinit var favoritesStore: FavoritesStore
@@ -63,6 +69,10 @@ class HomeFragment : Fragment() {
 
     private var favoritesCollectJob: Job? = null
 
+    // Remember focus so returning from Search restores the last focused item.
+    private var lastFocusedRow: Int = 0
+    private var lastFocusedCol: Int = 0
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -74,6 +84,14 @@ class HomeFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         progressStore = ProgressStore.from(requireContext())
         favoritesStore = FavoritesStore.from(requireContext())
+
+        btnOpenSearch = view.findViewById(R.id.btn_open_search)
+        btnOpenSearch.setOnClickListener {
+            // Store current focus before navigating away.
+            lastFocusedRow = if (this::focusManager.isInitialized) focusManager.rowIndex else 0
+            lastFocusedCol = if (this::focusManager.isInitialized) focusManager.colIndex else 0
+            (activity as? Host)?.openSearch()
+        }
 
         rowsRecycler = view.findViewById(R.id.rows_recycler)
         rowsRecycler.layoutManager = LinearLayoutManager(requireContext(), RecyclerView.VERTICAL, false)
@@ -117,7 +135,11 @@ class HomeFragment : Fragment() {
                     if (focusManager.moveUp()) {
                         adapter.requestFocusFor(rowsRecycler, focusManager.rowIndex, focusManager.colIndex)
                         true
-                    } else false
+                    } else {
+                        // At top: move focus to Search button for convenience.
+                        btnOpenSearch.requestFocus()
+                        true
+                    }
                 }
 
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
@@ -157,6 +179,17 @@ class HomeFragment : Fragment() {
                 else -> false
             }
         }
+
+        // Let user DPAD down from Search into content.
+        btnOpenSearch.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                adapter.requestFocusFor(rowsRecycler, focusManager.rowIndex, focusManager.colIndex)
+                true
+            } else {
+                false
+            }
+        }
     }
 
     override fun onResume() {
@@ -167,8 +200,8 @@ class HomeFragment : Fragment() {
     }
 
     private fun refreshRows(restoreFocus: Boolean) {
-        val prevRow = if (this::focusManager.isInitialized) focusManager.rowIndex else 0
-        val prevCol = if (this::focusManager.isInitialized) focusManager.colIndex else 0
+        val prevRow = if (this::focusManager.isInitialized) focusManager.rowIndex else lastFocusedRow
+        val prevCol = if (this::focusManager.isInitialized) focusManager.colIndex else lastFocusedCol
 
         continueWatching = progressStore.listInProgress()
         val hasContinue = continueWatching.isNotEmpty()
