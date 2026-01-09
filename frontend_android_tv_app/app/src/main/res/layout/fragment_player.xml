@@ -135,6 +135,13 @@
             android:paddingTop="10dp" />
     </LinearLayout>
 
+    <!-- Subtitle settings overlay (coexists with controls + Next Up) -->
+    <include
+        android:id="@+id/include_subtitle_settings"
+        layout="@layout/overlay_subtitle_settings"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
+
     <!-- Controls overlay (auto-hide) -->
     <LinearLayout
         android:id="@+id/controls_overlay"
@@ -250,7 +257,7 @@
             android:id="@+id/player_hint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="DPAD: Left/Right seek, Up/Down volume, Center play/pause. M mute. Back exit."
+            android:text="DPAD: Left/Right seek, Up/Down volume, Center play/pause. M mute. S or long-press OK: subtitles. Back exit."
             android:textColor="#B3FFFFFF"
             android:textSize="12sp"
             android:paddingTop="10dp"/>

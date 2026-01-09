@@ -1,27 +1,37 @@
 package com.example.frontend_android_tv_app.ui.screens
 
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.ListView
 import android.widget.ProgressBar
 import android.widget.SeekBar
 import android.widget.TextView
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
+import androidx.media3.common.util.UnstableApi
 import com.bumptech.glide.Glide
 import com.example.frontend_android_tv_app.R
 import com.example.frontend_android_tv_app.data.FavoritesStore
 import com.example.frontend_android_tv_app.data.LastPlayedIndexStore
 import com.example.frontend_android_tv_app.data.ProgressStore
+import com.example.frontend_android_tv_app.data.SubtitleSelectionStore
+import com.example.frontend_android_tv_app.data.SubtitlesRepository
 import com.example.frontend_android_tv_app.data.Video
 import com.example.frontend_android_tv_app.data.VideoParcelable
 import com.example.frontend_android_tv_app.data.VideosRepository
@@ -83,6 +93,17 @@ class PlayerFragment : Fragment() {
     private lateinit var progressStore: ProgressStore
     private lateinit var favoritesStore: FavoritesStore
     private lateinit var lastPlayedIndexStore: LastPlayedIndexStore
+    private lateinit var subtitleSelectionStore: SubtitleSelectionStore
+
+    // Subtitle track state
+    private var availableSubtitleTracks: List<SubtitlesRepository.SubtitleTrack> = emptyList()
+    private var selectedSubtitleTrackId: String? = null // null => not loaded yet; "__off__" => Off
+
+    // Subtitle settings overlay (in-player)
+    private lateinit var subtitleSettingsOverlay: View
+    private lateinit var subtitleSettingsList: ListView
+    private lateinit var subtitleSettingsTitle: TextView
+    private var subtitleOverlayAdapter: ArrayAdapter<String>? = null
 
     private val uiHandler = Handler(Looper.getMainLooper())
     private val hideOverlayRunnable = Runnable { setOverlayVisible(false) }
@@ -124,6 +145,7 @@ class PlayerFragment : Fragment() {
         progressStore = ProgressStore.from(requireContext())
         favoritesStore = FavoritesStore.from(requireContext())
         lastPlayedIndexStore = LastPlayedIndexStore.from(requireContext())
+        subtitleSelectionStore = SubtitleSelectionStore.from(requireContext())
     }
 
     override fun onCreateView(
@@ -157,6 +179,12 @@ class PlayerFragment : Fragment() {
         btnNextUpPlayNow = view.findViewById(R.id.btn_nextup_play_now)
         btnNextUpCancel = view.findViewById(R.id.btn_nextup_cancel)
         nextUpLabel = view.findViewById(R.id.nextup_label)
+
+        // Subtitle settings overlay bindings
+        subtitleSettingsOverlay = view.findViewById(R.id.subtitle_settings_overlay)
+        subtitleSettingsList = view.findViewById(R.id.subtitle_settings_list)
+        subtitleSettingsTitle = view.findViewById(R.id.subtitle_settings_title)
+        subtitleSettingsOverlay.visibility = View.GONE
 
         titleText.text = video.title
 
@@ -217,12 +245,44 @@ class PlayerFragment : Fragment() {
             }
         })
 
-        // Player view consumes key events; capture on root.
+        // Player view consumes key events; capture on root (support ACTION_DOWN + long-press).
         view.isFocusableInTouchMode = true
         view.requestFocus()
         view.setOnKeyListener { _, keyCode, event ->
-            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
-            handleKey(keyCode)
+            // If subtitle settings overlay is open, give it first chance to handle Back.
+            if (subtitleSettingsOverlay.isVisible) {
+                if (event.action == KeyEvent.ACTION_DOWN &&
+                    (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE)
+                ) {
+                    hideSubtitleSettingsOverlay()
+                    return@setOnKeyListener true
+                }
+                // Allow ListView navigation by not consuming DPAD keys here.
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                    keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                    keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                    keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                ) {
+                    return@setOnKeyListener false
+                }
+            }
+
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    // Long-press Enter/Center toggles subtitles.
+                    val longPressTimeout = ViewConfiguration.getLongPressTimeout()
+                    if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) &&
+                        event.downTime != 0L &&
+                        event.eventTime - event.downTime >= longPressTimeout
+                    ) {
+                        toggleSubtitlesQuick()
+                        return@setOnKeyListener true
+                    }
+                    return@setOnKeyListener handleKey(keyCode)
+                }
+                KeyEvent.ACTION_MULTIPLE -> false
+                else -> false
+            }
         }
 
         // Show overlay initially for discoverability.
@@ -233,9 +293,47 @@ class PlayerFragment : Fragment() {
     override fun onStart() {
         super.onStart()
         val ctx = requireContext()
+
+        // Load local tracks and restore persisted selection for this video.
+        availableSubtitleTracks = SubtitlesRepository.tracksForVideo(video.id)
+        selectedSubtitleTrackId = subtitleSelectionStore.getSelectedTrackId(video.id)
+            ?: SubtitleSelectionStore.TRACK_ID_OFF
+
+        // If persisted selection points to a missing track, clear it (edge-case requirement).
+        if (selectedSubtitleTrackId != SubtitleSelectionStore.TRACK_ID_OFF) {
+            val exists = availableSubtitleTracks.any { it.id == selectedSubtitleTrackId }
+            if (!exists) {
+                selectedSubtitleTrackId = SubtitleSelectionStore.TRACK_ID_OFF
+                subtitleSelectionStore.setSelectedTrackId(video.id, SubtitleSelectionStore.TRACK_ID_OFF)
+            }
+        }
+
         player = ExoPlayer.Builder(ctx).build().also { exo ->
             playerView.player = exo
-            exo.setMediaItem(MediaItem.fromUri(video.videoUrl))
+
+            // Apply TV-appropriate subtitle styling (readability).
+            @UnstableApi
+            fun applySubtitleStyling() {
+                val subtitleView: SubtitleView? = playerView.subtitleView
+                subtitleView?.setStyle(
+                    CaptionStyleCompat(
+                        /* foregroundColor= */ Color.WHITE,
+                        /* backgroundColor= */ Color.parseColor("#66000000"),
+                        /* windowColor= */ Color.TRANSPARENT,
+                        /* edgeType= */ CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW,
+                        /* edgeColor= */ Color.BLACK,
+                        /* typeface= */ null
+                    )
+                )
+                // Use a larger text size suitable for TV viewing.
+                // Media3 SubtitleView#setFixedTextSize expects a sizeType int:
+                // 0 = fraction, 1 = px, 2 = sp. (Keep numeric to avoid API constant mismatch across versions.)
+                subtitleView?.setFixedTextSize(2, 22f)
+            }
+            applySubtitleStyling()
+
+            val mediaItem = buildMediaItemForCurrentVideo()
+            exo.setMediaItem(mediaItem)
             exo.prepare()
 
             exo.addListener(object : Player.Listener {
@@ -286,6 +384,9 @@ class PlayerFragment : Fragment() {
             exo.playWhenReady = true
         }
 
+        // Configure subtitle settings overlay UI once we have tracks.
+        configureSubtitleOverlayUi()
+
         uiHandler.post(progressTick)
         uiHandler.post(progressPersistTick)
         updateVolumeText()
@@ -328,6 +429,24 @@ class PlayerFragment : Fragment() {
             }
         }
 
+        // If subtitle overlay is visible, handle OK/Center to select, and S to toggle.
+        if (subtitleSettingsOverlay.isVisible) {
+            return when (keyCode) {
+                KeyEvent.KEYCODE_S -> {
+                    toggleSubtitlesQuick()
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    val pos = subtitleSettingsList.checkedItemPosition
+                    if (pos != ListView.INVALID_POSITION) {
+                        applySubtitleSelectionByIndex(pos)
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+
         showOverlayTemporarily()
 
         return when (keyCode) {
@@ -358,6 +477,11 @@ class PlayerFragment : Fragment() {
             }
             KeyEvent.KEYCODE_M -> {
                 toggleMute()
+                true
+            }
+            KeyEvent.KEYCODE_S -> {
+                // Quick toggle subtitles on/off (defaults to first track when enabling).
+                toggleSubtitlesQuick()
                 true
             }
             // "F toggle full screen" is effectively always full screen in this TV player.
@@ -609,6 +733,7 @@ class PlayerFragment : Fragment() {
     private fun playNextUp(next: Video, nextRowKey: String, nextIndex: Int) {
         // Hide overlay and start playback of next item.
         hideNextUpOverlay()
+        hideSubtitleSettingsOverlay()
         cancelAutoplayForThisSession = false
 
         video = next
@@ -619,11 +744,164 @@ class PlayerFragment : Fragment() {
         rowKey = nextRowKey
         currentIndex = nextIndex
 
-        // Reset and play new media.
+        // Refresh subtitle state for new video.
+        availableSubtitleTracks = SubtitlesRepository.tracksForVideo(video.id)
+        selectedSubtitleTrackId = subtitleSelectionStore.getSelectedTrackId(video.id)
+            ?: SubtitleSelectionStore.TRACK_ID_OFF
+
+        if (selectedSubtitleTrackId != SubtitleSelectionStore.TRACK_ID_OFF) {
+            val exists = availableSubtitleTracks.any { it.id == selectedSubtitleTrackId }
+            if (!exists) {
+                selectedSubtitleTrackId = SubtitleSelectionStore.TRACK_ID_OFF
+                subtitleSelectionStore.setSelectedTrackId(video.id, SubtitleSelectionStore.TRACK_ID_OFF)
+            }
+        }
+
+        configureSubtitleOverlayUi()
+
+        // Reset and play new media with subtitle configs.
         val p = player ?: return
-        p.setMediaItem(MediaItem.fromUri(next.videoUrl))
+        p.setMediaItem(buildMediaItemForCurrentVideo())
         p.prepare()
         p.playWhenReady = true
+    }
+
+    private fun buildMediaItemForCurrentVideo(): MediaItem {
+        val builder = MediaItem.Builder()
+            .setUri(video.videoUrl)
+
+        // Always attach available subtitle configurations, even if currently Off.
+        // We control whether they show via track selection parameters.
+        val configs = availableSubtitleTracks.map { SubtitlesRepository.toSubtitleConfiguration(it) }
+        if (configs.isNotEmpty()) {
+            builder.setSubtitleConfigurations(configs)
+        }
+
+        return builder.build()
+    }
+
+    private fun configureSubtitleOverlayUi() {
+        if (!this::subtitleSettingsOverlay.isInitialized) return
+
+        // Hide entire overlay if no tracks exist.
+        if (availableSubtitleTracks.isEmpty()) {
+            subtitleSettingsOverlay.visibility = View.GONE
+            return
+        }
+
+        val items = buildList {
+            add("Off")
+            addAll(availableSubtitleTracks.map { it.label })
+        }
+
+        val adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_list_item_single_choice,
+            items
+        )
+        subtitleOverlayAdapter = adapter
+        subtitleSettingsList.adapter = adapter
+        subtitleSettingsList.choiceMode = ListView.CHOICE_MODE_SINGLE
+
+        // Restore selection to overlay
+        val checkedIndex = when (val id = selectedSubtitleTrackId) {
+            null, SubtitleSelectionStore.TRACK_ID_OFF -> 0
+            else -> {
+                val idx = availableSubtitleTracks.indexOfFirst { it.id == id }
+                if (idx >= 0) idx + 1 else 0
+            }
+        }
+        subtitleSettingsList.setItemChecked(checkedIndex, true)
+
+        subtitleSettingsList.setOnItemClickListener { _, _, position, _ ->
+            applySubtitleSelectionByIndex(position)
+        }
+    }
+
+    private fun showSubtitleSettingsOverlay() {
+        if (availableSubtitleTracks.isEmpty()) return
+        // Coexist with existing overlays: if Next Up is visible, don't open.
+        if (nextUpOverlay.isVisible) return
+
+        subtitleSettingsOverlay.visibility = View.VISIBLE
+        // Do not hide playback controls just because subtitle overlay is open.
+        // We keep the main overlay timer running, but we can re-show for discoverability.
+        showOverlayTemporarily()
+
+        subtitleSettingsList.post {
+            subtitleSettingsList.requestFocus()
+        }
+    }
+
+    private fun hideSubtitleSettingsOverlay() {
+        if (!this::subtitleSettingsOverlay.isInitialized) return
+        subtitleSettingsOverlay.visibility = View.GONE
+    }
+
+    private fun applySubtitleSelectionByIndex(index: Int) {
+        if (availableSubtitleTracks.isEmpty()) return
+
+        if (index <= 0) {
+            applySubtitleSelection(SubtitleSelectionStore.TRACK_ID_OFF)
+        } else {
+            val track = availableSubtitleTracks.getOrNull(index - 1)
+            if (track == null) {
+                applySubtitleSelection(SubtitleSelectionStore.TRACK_ID_OFF)
+            } else {
+                applySubtitleSelection(track.id)
+            }
+        }
+        hideSubtitleSettingsOverlay()
+    }
+
+    private fun applySubtitleSelection(trackId: String) {
+        selectedSubtitleTrackId = trackId
+        subtitleSelectionStore.setSelectedTrackId(video.id, trackId)
+
+        // Apply to player track selection.
+        // Media3 uses TrackSelectionParameters; we enable/disable text tracks.
+        val p = player ?: return
+        val enableText = trackId != SubtitleSelectionStore.TRACK_ID_OFF
+
+        val builder = p.trackSelectionParameters
+            .buildUpon()
+            // If disabled, don't select text tracks.
+            .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_TEXT, !enableText)
+
+        // Try to prefer language/label if possible. If we can't, enabling text will let Exo choose default.
+        if (enableText) {
+            val track = availableSubtitleTracks.firstOrNull { it.id == trackId }
+            if (track?.language != null) {
+                builder.setPreferredTextLanguage(track.language)
+            }
+        }
+
+        p.trackSelectionParameters = builder.build()
+
+        // Keep overlay list selection in sync.
+        configureSubtitleOverlayUi()
+    }
+
+    private fun toggleSubtitlesQuick() {
+        if (availableSubtitleTracks.isEmpty()) return
+
+        val current = selectedSubtitleTrackId ?: SubtitleSelectionStore.TRACK_ID_OFF
+        val next = if (current == SubtitleSelectionStore.TRACK_ID_OFF) {
+            // Turn on => choose last persisted if present and valid; else first available.
+            val persisted = subtitleSelectionStore.getSelectedTrackId(video.id)
+            val validPersisted =
+                persisted != null &&
+                    persisted != SubtitleSelectionStore.TRACK_ID_OFF &&
+                    availableSubtitleTracks.any { it.id == persisted }
+            if (validPersisted) persisted!! else availableSubtitleTracks.first().id
+        } else {
+            SubtitleSelectionStore.TRACK_ID_OFF
+        }
+
+        applySubtitleSelection(next)
+
+        // When user toggles, show the subtitle overlay to confirm current state.
+        showSubtitleSettingsOverlay()
     }
 
     companion object {

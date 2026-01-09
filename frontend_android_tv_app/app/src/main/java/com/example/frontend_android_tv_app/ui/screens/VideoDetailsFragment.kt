@@ -1,17 +1,22 @@
 package com.example.frontend_android_tv_app.ui.screens
 
+import android.app.AlertDialog
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.ListView
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.example.frontend_android_tv_app.R
 import com.example.frontend_android_tv_app.data.FavoritesStore
 import com.example.frontend_android_tv_app.data.ProgressStore
+import com.example.frontend_android_tv_app.data.SubtitleSelectionStore
+import com.example.frontend_android_tv_app.data.SubtitlesRepository
 import com.example.frontend_android_tv_app.data.Video
 import com.example.frontend_android_tv_app.data.VideoParcelable
 import com.example.frontend_android_tv_app.data.VideosRepository
@@ -47,12 +52,14 @@ class VideoDetailsFragment : Fragment() {
     private lateinit var descText: TextView
     private lateinit var playButton: Button
     private lateinit var resumeButton: Button
+    private lateinit var subtitlesButton: Button
     private lateinit var favoriteButton: Button
     private lateinit var resumeHint: TextView
 
     private lateinit var video: Video
     private lateinit var progressStore: ProgressStore
     private lateinit var favoritesStore: FavoritesStore
+    private lateinit var subtitleSelectionStore: SubtitleSelectionStore
 
     private var favoritesCollectJob: Job? = null
 
@@ -76,14 +83,27 @@ class VideoDetailsFragment : Fragment() {
         descText = view.findViewById(R.id.details_description)
         playButton = view.findViewById(R.id.details_play_button)
         resumeButton = view.findViewById(R.id.details_resume_button)
+        subtitlesButton = view.findViewById(R.id.details_subtitles_button)
         favoriteButton = view.findViewById(R.id.details_favorite_button)
         resumeHint = view.findViewById(R.id.details_resume_hint)
 
         progressStore = ProgressStore.from(requireContext())
         favoritesStore = FavoritesStore.from(requireContext())
+        subtitleSelectionStore = SubtitleSelectionStore.from(requireContext())
 
         titleText.text = video.title
         descText.text = video.description
+
+        // Subtitles button: show only if there are local tracks for this video.
+        val tracks = SubtitlesRepository.tracksForVideo(video.id)
+        if (tracks.isEmpty()) {
+            subtitlesButton.visibility = View.GONE
+        } else {
+            subtitlesButton.visibility = View.VISIBLE
+            subtitlesButton.setOnClickListener {
+                showSubtitleSelectorDialog(videoId = video.id)
+            }
+        }
 
         val rowList = VideosRepository.videosForCategory(video.category)
         val ids = ArrayList(rowList.map { it.id })
@@ -151,6 +171,62 @@ class VideoDetailsFragment : Fragment() {
                 true
             } else false
         }
+    }
+
+    private fun showSubtitleSelectorDialog(videoId: String) {
+        val tracks = SubtitlesRepository.tracksForVideo(videoId)
+        if (tracks.isEmpty()) return
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_subtitle_selector, null)
+        val listView: ListView = dialogView.findViewById(R.id.subtitle_list)
+
+        val items = buildList {
+            add("Off")
+            addAll(tracks.map { it.label })
+        }
+
+        val adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_list_item_single_choice,
+            items
+        )
+        listView.adapter = adapter
+
+        val saved = subtitleSelectionStore.getSelectedTrackId(videoId)
+        val initiallySelectedIndex = when {
+            saved == null -> 0 // default Off if none selected previously
+            saved == SubtitleSelectionStore.TRACK_ID_OFF -> 0
+            else -> {
+                val idx = tracks.indexOfFirst { it.id == saved }
+                if (idx >= 0) idx + 1 else 0 // missing => default Off
+            }
+        }
+        listView.choiceMode = ListView.CHOICE_MODE_SINGLE
+        listView.setItemChecked(initiallySelectedIndex, true)
+
+        val dialog = AlertDialog.Builder(requireContext())
+            .setView(dialogView)
+            .setCancelable(true)
+            .create()
+
+        listView.setOnItemClickListener { _, _, position, _ ->
+            if (position == 0) {
+                subtitleSelectionStore.setSelectedTrackId(videoId, SubtitleSelectionStore.TRACK_ID_OFF)
+            } else {
+                val track = tracks.getOrNull(position - 1)
+                if (track != null) {
+                    subtitleSelectionStore.setSelectedTrackId(videoId, track.id)
+                } else {
+                    // Defensive: clear if something is off
+                    subtitleSelectionStore.setSelectedTrackId(videoId, SubtitleSelectionStore.TRACK_ID_OFF)
+                }
+            }
+            dialog.dismiss()
+        }
+
+        dialog.show()
+        // Focus list for DPAD navigation.
+        listView.post { listView.requestFocus() }
     }
 
     private fun formatTime(ms: Long): String {

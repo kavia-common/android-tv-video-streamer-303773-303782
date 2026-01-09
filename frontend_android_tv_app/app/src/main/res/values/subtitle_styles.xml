@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- TV-friendly subtitle style: larger text and readable on bright scenes -->
+    <style name="TvSubtitleStyle">
+        <!-- Used programmatically with CaptionStyleCompat; values documented here for consistency -->
+        <item name="android:textSize">22sp</item>
+    </style>
+</resources>
