@@ -21,6 +21,26 @@
             android:scaleType="centerCrop"
             android:contentDescription="Video thumbnail"/>
 
+        <!-- Favorites heart overlay (hidden by default) -->
+        <FrameLayout
+            android:id="@+id/card_favorite_badge"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_favorite_badge"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/card_favorite_icon"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_heart"
+                android:contentDescription="Favorite" />
+        </FrameLayout>
+
         <!-- Continue Watching progress overlay (hidden by default) -->
         <LinearLayout
             android:id="@+id/card_progress_container"

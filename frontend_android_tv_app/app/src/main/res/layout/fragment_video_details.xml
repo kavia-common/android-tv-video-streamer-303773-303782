@@ -52,6 +52,16 @@
             android:textAllCaps="false"
             android:focusable="true"
             android:focusableInTouchMode="true"/>
+
+        <Button
+            android:id="@+id/details_favorite_button"
+            android:layout_width="300dp"
+            android:layout_height="56dp"
+            android:layout_marginStart="16dp"
+            android:text="Add to Favorites"
+            android:textAllCaps="false"
+            android:focusable="true"
+            android:focusableInTouchMode="true"/>
     </LinearLayout>
 
     <TextView

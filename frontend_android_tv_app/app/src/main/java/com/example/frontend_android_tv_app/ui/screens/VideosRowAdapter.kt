@@ -16,7 +16,8 @@ import com.example.frontend_android_tv_app.ui.Theme
 class VideosRowAdapter(
     private val videos: List<Video>,
     private val onVideoSelected: (Video) -> Unit,
-    private val progressPercentForVideoId: ((videoId: String) -> Int?)? = null
+    private val progressPercentForVideoId: ((videoId: String) -> Int?)? = null,
+    private val isFavorite: ((videoId: String) -> Boolean)? = null
 ) : RecyclerView.Adapter<VideosRowAdapter.VideoVH>() {
 
     private var focusedIndex: Int = 0
@@ -41,11 +42,14 @@ class VideosRowAdapter(
             val adapterPos = holder.bindingAdapterPosition
             if (adapterPos == RecyclerView.NO_POSITION) return@setOnFocusChangeListener
 
+            val isFav = isFavorite?.invoke(videos[adapterPos].id) == true
+
             if (hasFocus) {
                 focusedIndex = adapterPos
                 holder.applyFocused(true)
-                // Scale slightly for TV emphasis.
-                holder.itemView.animate().scaleX(1.06f).scaleY(1.06f).setDuration(120).start()
+                // Scale slightly for TV emphasis (favorites get a tiny extra pop).
+                val targetScale = if (isFav) 1.08f else 1.06f
+                holder.itemView.animate().scaleX(targetScale).scaleY(targetScale).setDuration(120).start()
             } else {
                 holder.applyFocused(false)
                 holder.itemView.animate().scaleX(1.0f).scaleY(1.0f).setDuration(120).start()
@@ -63,6 +67,10 @@ class VideosRowAdapter(
                 false
             }
         }
+
+        // Favorites overlay
+        val fav = isFavorite?.invoke(video.id) == true
+        holder.bindFavorite(fav)
 
         // Continue Watching progress overlay
         val pct = progressPercentForVideoId?.invoke(video.id)
@@ -83,6 +91,8 @@ class VideosRowAdapter(
         val title: TextView = itemView.findViewById(R.id.card_title)
         private val overlay: View = itemView.findViewById(R.id.card_focus_overlay)
 
+        private val favoriteBadge: View = itemView.findViewById(R.id.card_favorite_badge)
+
         private val progressContainer: View = itemView.findViewById(R.id.card_progress_container)
         private val progressFill: View = itemView.findViewById(R.id.card_progress_fill)
         private val progressRest: View = itemView.findViewById(R.id.card_progress_rest)
@@ -100,6 +110,10 @@ class VideosRowAdapter(
                 overlay.background = null
                 overlay.alpha = 0f
             }
+        }
+
+        fun bindFavorite(isFavorite: Boolean) {
+            favoriteBadge.visibility = if (isFavorite) View.VISIBLE else View.GONE
         }
 
         fun bindProgressPercent(percent: Int?) {

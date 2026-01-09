@@ -13,7 +13,8 @@ class CategoryRowsAdapter(
     private val categories: List<String>,
     private val videosForCategory: (String) -> List<Video>,
     private val onVideoSelected: (Video) -> Unit,
-    private val progressPercentForVideoId: ((videoId: String) -> Int?)? = null
+    private val progressPercentForVideoId: ((videoId: String) -> Int?)? = null,
+    private val isFavorite: ((videoId: String) -> Boolean)? = null
 ) : RecyclerView.Adapter<CategoryRowsAdapter.RowVH>() {
 
     private val rowAdapters = mutableMapOf<Int, VideosRowAdapter>()
@@ -33,7 +34,8 @@ class CategoryRowsAdapter(
         val adapter = VideosRowAdapter(
             videos = videosForCategory(category),
             onVideoSelected = onVideoSelected,
-            progressPercentForVideoId = progressPercentForVideoId
+            progressPercentForVideoId = progressPercentForVideoId,
+            isFavorite = isFavorite
         )
 
         rowAdapters[position] = adapter

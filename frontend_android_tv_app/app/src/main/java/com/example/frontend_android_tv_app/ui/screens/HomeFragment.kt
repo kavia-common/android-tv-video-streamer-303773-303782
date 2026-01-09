@@ -6,18 +6,25 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.frontend_android_tv_app.R
+import com.example.frontend_android_tv_app.data.FavoritesStore
 import com.example.frontend_android_tv_app.data.ProgressStore
 import com.example.frontend_android_tv_app.data.Video
 import com.example.frontend_android_tv_app.data.VideosRepository
 import com.example.frontend_android_tv_app.ui.focus.GridFocusManager
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 /**
  * Home screen: horizontal category rows with video thumbnails.
  *
- * Adds an optional Continue Watching row at the top (local-only, based on saved playback progress).
+ * Adds:
+ * - Optional Continue Watching row at the top (local-only, based on saved playback progress).
+ * - Optional Favorites row near the top (after Continue Watching if present).
  *
  * DPAD navigation:
  * - Left/Right: move within row (wrap-around)
@@ -35,11 +42,17 @@ class HomeFragment : Fragment() {
     private lateinit var adapter: CategoryRowsAdapter
 
     private lateinit var progressStore: ProgressStore
+    private lateinit var favoritesStore: FavoritesStore
 
     private var categoriesForUi: List<String> = emptyList()
     private var continueWatching: List<ProgressStore.VideoProgress> = emptyList()
 
+    private var favoritesIds: Set<String> = emptySet()
+    private var favoritesVideos: List<Video> = emptyList()
+
     private lateinit var focusManager: GridFocusManager
+
+    private var favoritesCollectJob: Job? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -49,21 +62,28 @@ class HomeFragment : Fragment() {
         return inflater.inflate(R.layout.fragment_home, container, false)
     }
 
-    override fun onResume() {
-        super.onResume()
-        // Refresh whenever returning from Player (or anywhere) so row updates immediately.
-        refreshRows()
-    }
-
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         progressStore = ProgressStore.from(requireContext())
+        favoritesStore = FavoritesStore.from(requireContext())
 
         rowsRecycler = view.findViewById(R.id.rows_recycler)
         rowsRecycler.layoutManager = LinearLayoutManager(requireContext(), RecyclerView.VERTICAL, false)
         rowsRecycler.isFocusable = true
         rowsRecycler.isFocusableInTouchMode = true
 
-        refreshRows()
+        // Keep Home in sync in real time with favorites changes.
+        favoritesCollectJob?.cancel()
+        favoritesCollectJob = viewLifecycleOwner.lifecycleScope.launch {
+            favoritesStore.favoritesFlow().collectLatest { ids ->
+                favoritesIds = ids
+                favoritesVideos = resolveFavorites(ids)
+
+                // Rebuild rows whenever favorites set changes (so row appears/disappears).
+                refreshRows(restoreFocus = true)
+            }
+        }
+
+        refreshRows(restoreFocus = false)
 
         // Handle DPAD at the Home screen level to allow wrap-around and row switching.
         rowsRecycler.setOnKeyListener { _, keyCode, event ->
@@ -76,24 +96,28 @@ class HomeFragment : Fragment() {
                         true
                     } else false
                 }
+
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
                     if (focusManager.moveRight(wrap = true)) {
                         adapter.requestFocusFor(rowsRecycler, focusManager.rowIndex, focusManager.colIndex)
                         true
                     } else false
                 }
+
                 KeyEvent.KEYCODE_DPAD_UP -> {
                     if (focusManager.moveUp()) {
                         adapter.requestFocusFor(rowsRecycler, focusManager.rowIndex, focusManager.colIndex)
                         true
                     } else false
                 }
+
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
                     if (focusManager.moveDown()) {
                         adapter.requestFocusFor(rowsRecycler, focusManager.rowIndex, focusManager.colIndex)
                         true
                     } else false
                 }
+
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                     val selected = getSelectedVideo(focusManager.rowIndex, focusManager.colIndex)
                     if (selected != null) {
@@ -102,22 +126,37 @@ class HomeFragment : Fragment() {
                             val resumePos = p?.positionMs ?: 0L
                             (activity as? Host)?.playVideo(selected, resumePos)
                         } else {
+                            // Favorites row uses the same "open details" behavior.
                             (activity as? Host)?.openDetails(selected)
                         }
                         true
                     } else false
                 }
+
                 else -> false
             }
         }
     }
 
-    private fun refreshRows() {
+    override fun onResume() {
+        super.onResume()
+        // Refresh whenever returning from Player (or anywhere) so Continue Watching updates immediately.
+        // Favorites are updated by Flow subscription, but refreshing is still cheap and keeps ordering fresh.
+        refreshRows(restoreFocus = true)
+    }
+
+    private fun refreshRows(restoreFocus: Boolean) {
+        val prevRow = if (this::focusManager.isInitialized) focusManager.rowIndex else 0
+        val prevCol = if (this::focusManager.isInitialized) focusManager.colIndex else 0
+
         continueWatching = progressStore.listInProgress()
-        categoriesForUi = if (continueWatching.isNotEmpty()) {
-            listOf(CONTINUE_WATCHING_LABEL) + VideosRepository.categories
-        } else {
-            VideosRepository.categories
+        val hasContinue = continueWatching.isNotEmpty()
+        val hasFavorites = favoritesVideos.isNotEmpty()
+
+        categoriesForUi = buildList {
+            if (hasContinue) add(CONTINUE_WATCHING_LABEL)
+            if (hasFavorites) add(FAVORITES_LABEL)
+            addAll(VideosRepository.categories)
         }
 
         // Focus manager depends on row count + per-row columns.
@@ -129,10 +168,10 @@ class HomeFragment : Fragment() {
         adapter = CategoryRowsAdapter(
             categories = categoriesForUi,
             videosForCategory = { cat ->
-                if (cat == CONTINUE_WATCHING_LABEL) {
-                    continueWatching.map { it.video }
-                } else {
-                    VideosRepository.videosForCategory(cat)
+                when (cat) {
+                    CONTINUE_WATCHING_LABEL -> continueWatching.map { it.video }
+                    FAVORITES_LABEL -> favoritesVideos
+                    else -> VideosRepository.videosForCategory(cat)
                 }
             },
             onVideoSelected = { video ->
@@ -147,24 +186,41 @@ class HomeFragment : Fragment() {
             progressPercentForVideoId = { videoId ->
                 // Only show progress bar for Continue Watching items.
                 continueWatching.firstOrNull { it.video.id == videoId }?.percent
+            },
+            isFavorite = { videoId ->
+                favoritesIds.contains(videoId)
             }
         )
 
         rowsRecycler.adapter = adapter
 
-        // Set initial focus to first row/first item once layout is ready.
+        // Restore focus if requested; otherwise set initial focus to first row/first item.
         rowsRecycler.post {
-            focusManager.setFocus(0, 0)
+            if (restoreFocus) {
+                val safeRow = prevRow.coerceIn(0, (categoriesForUi.size - 1).coerceAtLeast(0))
+                val cols = getVideosForRow(safeRow).size.coerceAtLeast(1)
+                val safeCol = prevCol.coerceIn(0, cols - 1)
+                focusManager.setFocus(safeRow, safeCol)
+            } else {
+                focusManager.setFocus(0, 0)
+            }
             adapter.requestFocusFor(rowsRecycler, focusManager.rowIndex, focusManager.colIndex)
         }
     }
 
+    private fun resolveFavorites(ids: Set<String>): List<Video> {
+        if (ids.isEmpty()) return emptyList()
+        val byId = VideosRepository.videos.associateBy { it.id }
+        // Keep stable ordering (sorted by id) to avoid row shuffling on rebind.
+        return ids.toList().sorted().mapNotNull { byId[it] }
+    }
+
     private fun getVideosForRow(rowIndex: Int): List<Video> {
         val cat = categoriesForUi.getOrNull(rowIndex) ?: return emptyList()
-        return if (cat == CONTINUE_WATCHING_LABEL) {
-            continueWatching.map { it.video }
-        } else {
-            VideosRepository.videosForCategory(cat)
+        return when (cat) {
+            CONTINUE_WATCHING_LABEL -> continueWatching.map { it.video }
+            FAVORITES_LABEL -> favoritesVideos
+            else -> VideosRepository.videosForCategory(cat)
         }
     }
 
@@ -179,5 +235,6 @@ class HomeFragment : Fragment() {
 
     companion object {
         private const val CONTINUE_WATCHING_LABEL = "Continue Watching"
+        private const val FAVORITES_LABEL = "Favorites"
     }
 }

@@ -8,15 +8,21 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import com.example.frontend_android_tv_app.R
+import com.example.frontend_android_tv_app.data.FavoritesStore
 import com.example.frontend_android_tv_app.data.ProgressStore
 import com.example.frontend_android_tv_app.data.Video
+import com.example.frontend_android_tv_app.data.VideoParcelable
 import com.example.frontend_android_tv_app.data.toParcelable
 import com.example.frontend_android_tv_app.data.toVideo
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 /**
  * Video details screen.
- * Shows title/description and a Play button (focusable).
+ * Shows title/description and primary actions: Resume (if applicable), Play, and Favorite toggle.
  */
 class VideoDetailsFragment : Fragment() {
 
@@ -30,14 +36,18 @@ class VideoDetailsFragment : Fragment() {
     private lateinit var descText: TextView
     private lateinit var playButton: Button
     private lateinit var resumeButton: Button
+    private lateinit var favoriteButton: Button
     private lateinit var resumeHint: TextView
 
     private lateinit var video: Video
     private lateinit var progressStore: ProgressStore
+    private lateinit var favoritesStore: FavoritesStore
+
+    private var favoritesCollectJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val parcel = requireArguments().getParcelable<com.example.frontend_android_tv_app.data.VideoParcelable>(ARG_VIDEO)
+        val parcel = requireArguments().getParcelable<VideoParcelable>(ARG_VIDEO)
             ?: error("VideoDetailsFragment requires a Video argument")
         video = parcel.toVideo()
     }
@@ -55,15 +65,21 @@ class VideoDetailsFragment : Fragment() {
         descText = view.findViewById(R.id.details_description)
         playButton = view.findViewById(R.id.details_play_button)
         resumeButton = view.findViewById(R.id.details_resume_button)
+        favoriteButton = view.findViewById(R.id.details_favorite_button)
         resumeHint = view.findViewById(R.id.details_resume_hint)
 
         progressStore = ProgressStore.from(requireContext())
+        favoritesStore = FavoritesStore.from(requireContext())
 
         titleText.text = video.title
         descText.text = video.description
 
         playButton.setOnClickListener {
             (activity as? Host)?.playVideo(video)
+        }
+
+        favoriteButton.setOnClickListener {
+            favoritesStore.toggleFavorite(video.id)
         }
 
         val progress = progressStore.getProgress(video.id)
@@ -87,6 +103,15 @@ class VideoDetailsFragment : Fragment() {
             resumeHint.visibility = View.GONE
             // Focus Play by default for TV readiness.
             playButton.post { playButton.requestFocus() }
+        }
+
+        // Keep favorite button label in sync with current favorite state.
+        favoritesCollectJob?.cancel()
+        favoritesCollectJob = viewLifecycleOwner.lifecycleScope.launch {
+            favoritesStore.favoritesFlow().collectLatest { ids ->
+                val isFav = ids.contains(video.id)
+                favoriteButton.text = if (isFav) "Remove from Favorites" else "Add to Favorites"
+            }
         }
 
         // Handle Back at fragment view level.
