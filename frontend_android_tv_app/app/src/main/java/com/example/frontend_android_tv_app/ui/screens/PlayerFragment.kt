@@ -16,6 +16,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.example.frontend_android_tv_app.R
+import com.example.frontend_android_tv_app.data.ProgressStore
 import com.example.frontend_android_tv_app.data.Video
 import com.example.frontend_android_tv_app.data.VideoParcelable
 import com.example.frontend_android_tv_app.data.toParcelable
@@ -55,6 +56,8 @@ class PlayerFragment : Fragment() {
     private lateinit var btnMute: Button
 
     private lateinit var video: Video
+    private var resumePositionMs: Long = 0L
+    private lateinit var progressStore: ProgressStore
 
     private val uiHandler = Handler(Looper.getMainLooper())
     private val hideOverlayRunnable = Runnable { setOverlayVisible(false) }
@@ -62,6 +65,13 @@ class PlayerFragment : Fragment() {
         override fun run() {
             updateTimeAndProgress()
             uiHandler.postDelayed(this, 250)
+        }
+    }
+
+    private val progressPersistTick = object : Runnable {
+        override fun run() {
+            persistProgressIfNeeded()
+            uiHandler.postDelayed(this, 4000) // every ~4 seconds
         }
     }
 
@@ -73,6 +83,8 @@ class PlayerFragment : Fragment() {
         val parcel = requireArguments().getParcelable<VideoParcelable>(ARG_VIDEO)
             ?: error("PlayerFragment requires a Video argument")
         video = parcel.toVideo()
+        resumePositionMs = requireArguments().getLong(ARG_RESUME_POSITION_MS, 0L)
+        progressStore = ProgressStore.from(requireContext())
     }
 
     override fun onCreateView(
@@ -150,22 +162,42 @@ class PlayerFragment : Fragment() {
             playerView.player = exo
             exo.setMediaItem(MediaItem.fromUri(video.videoUrl))
             exo.prepare()
-            exo.playWhenReady = true
 
             exo.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     updatePlayPauseLabel()
+                    // Persist on key state changes too (pause/play)
+                    persistProgressIfNeeded()
+                }
+
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_ENDED) {
+                        // Completed => clear progress so it doesn't show in Continue Watching.
+                        progressStore.clearProgress(video.id)
+                    } else {
+                        persistProgressIfNeeded()
+                    }
                 }
             })
+
+            // Seek before playWhenReady to satisfy resume behavior.
+            val startPos = resumePositionMs.coerceAtLeast(0L)
+            if (startPos > 0L) {
+                exo.seekTo(startPos)
+            }
+            exo.playWhenReady = true
         }
 
         uiHandler.post(progressTick)
+        uiHandler.post(progressPersistTick)
         updateVolumeText()
     }
 
     override fun onStop() {
         super.onStop()
+        persistProgressIfNeeded()
         uiHandler.removeCallbacks(progressTick)
+        uiHandler.removeCallbacks(progressPersistTick)
         uiHandler.removeCallbacks(hideOverlayRunnable)
         playerView.player = null
         player?.release()
@@ -302,8 +334,24 @@ class PlayerFragment : Fragment() {
         uiHandler.postDelayed(hideOverlayRunnable, 3000)
     }
 
+    private fun persistProgressIfNeeded() {
+        val p = player ?: return
+        val dur = p.duration
+        val pos = p.currentPosition
+
+        if (dur <= 0L) return
+
+        val percent = ((pos.toDouble() / dur.toDouble()) * 100.0).coerceIn(0.0, 100.0)
+        if (percent >= 95.0) {
+            progressStore.clearProgress(video.id)
+        } else {
+            progressStore.setProgress(video.id, pos, dur)
+        }
+    }
+
     companion object {
         private const val ARG_VIDEO = "arg_video"
+        private const val ARG_RESUME_POSITION_MS = "arg_resume_position_ms"
 
         // PUBLIC_INTERFACE
         fun newInstance(video: Video): PlayerFragment {
@@ -311,6 +359,18 @@ class PlayerFragment : Fragment() {
             return PlayerFragment().apply {
                 arguments = Bundle().apply {
                     putParcelable(ARG_VIDEO, video.toParcelable())
+                    putLong(ARG_RESUME_POSITION_MS, 0L)
+                }
+            }
+        }
+
+        // PUBLIC_INTERFACE
+        fun newInstance(video: Video, resumePositionMs: Long): PlayerFragment {
+            /** Create a new player fragment for the given video, resuming at the specified position (ms). */
+            return PlayerFragment().apply {
+                arguments = Bundle().apply {
+                    putParcelable(ARG_VIDEO, video.toParcelable())
+                    putLong(ARG_RESUME_POSITION_MS, resumePositionMs.coerceAtLeast(0L))
                 }
             }
         }

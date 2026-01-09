@@ -21,6 +21,31 @@
             android:scaleType="centerCrop"
             android:contentDescription="Video thumbnail"/>
 
+        <!-- Continue Watching progress overlay (hidden by default) -->
+        <LinearLayout
+            android:id="@+id/card_progress_container"
+            android:layout_width="match_parent"
+            android:layout_height="8dp"
+            android:layout_gravity="bottom"
+            android:orientation="horizontal"
+            android:background="#33000000"
+            android:visibility="gone">
+
+            <View
+                android:id="@+id/card_progress_fill"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="0"
+                android:background="#3B82F6" />
+
+            <View
+                android:id="@+id/card_progress_rest"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@android:color/transparent" />
+        </LinearLayout>
+
         <View
             android:id="@+id/card_focus_overlay"
             android:layout_width="match_parent"

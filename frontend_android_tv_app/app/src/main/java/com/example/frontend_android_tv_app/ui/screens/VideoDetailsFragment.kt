@@ -9,6 +9,7 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import com.example.frontend_android_tv_app.R
+import com.example.frontend_android_tv_app.data.ProgressStore
 import com.example.frontend_android_tv_app.data.Video
 import com.example.frontend_android_tv_app.data.toParcelable
 import com.example.frontend_android_tv_app.data.toVideo
@@ -21,14 +22,18 @@ class VideoDetailsFragment : Fragment() {
 
     interface Host {
         fun playVideo(video: Video)
+        fun playVideo(video: Video, resumePositionMs: Long)
         fun goBack()
     }
 
     private lateinit var titleText: TextView
     private lateinit var descText: TextView
     private lateinit var playButton: Button
+    private lateinit var resumeButton: Button
+    private lateinit var resumeHint: TextView
 
     private lateinit var video: Video
+    private lateinit var progressStore: ProgressStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,6 +54,10 @@ class VideoDetailsFragment : Fragment() {
         titleText = view.findViewById(R.id.details_title)
         descText = view.findViewById(R.id.details_description)
         playButton = view.findViewById(R.id.details_play_button)
+        resumeButton = view.findViewById(R.id.details_resume_button)
+        resumeHint = view.findViewById(R.id.details_resume_hint)
+
+        progressStore = ProgressStore.from(requireContext())
 
         titleText.text = video.title
         descText.text = video.description
@@ -57,8 +66,28 @@ class VideoDetailsFragment : Fragment() {
             (activity as? Host)?.playVideo(video)
         }
 
-        // Focus the Play button by default for TV readiness.
-        playButton.post { playButton.requestFocus() }
+        val progress = progressStore.getProgress(video.id)
+        val percent = progress?.percent ?: 0
+        val canResume = progress != null && percent in 1..94
+
+        if (canResume) {
+            val remainingMs = (progress!!.durationMs - progress.positionMs).coerceAtLeast(0L)
+            resumeHint.text = "Resume • ${formatTime(remainingMs)} remaining"
+            resumeHint.visibility = View.VISIBLE
+
+            resumeButton.visibility = View.VISIBLE
+            resumeButton.setOnClickListener {
+                (activity as? Host)?.playVideo(video, progress.positionMs)
+            }
+
+            // Focus Resume by default when applicable.
+            resumeButton.post { resumeButton.requestFocus() }
+        } else {
+            resumeButton.visibility = View.GONE
+            resumeHint.visibility = View.GONE
+            // Focus Play by default for TV readiness.
+            playButton.post { playButton.requestFocus() }
+        }
 
         // Handle Back at fragment view level.
         view.isFocusableInTouchMode = true
@@ -70,6 +99,13 @@ class VideoDetailsFragment : Fragment() {
                 true
             } else false
         }
+    }
+
+    private fun formatTime(ms: Long): String {
+        val totalSec = (ms / 1000).coerceAtLeast(0)
+        val min = totalSec / 60
+        val sec = totalSec % 60
+        return "%02d:%02d".format(min, sec)
     }
 
     companion object {

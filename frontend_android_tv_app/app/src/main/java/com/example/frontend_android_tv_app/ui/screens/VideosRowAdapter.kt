@@ -15,7 +15,8 @@ import com.example.frontend_android_tv_app.ui.Theme
 
 class VideosRowAdapter(
     private val videos: List<Video>,
-    private val onVideoSelected: (Video) -> Unit
+    private val onVideoSelected: (Video) -> Unit,
+    private val progressPercentForVideoId: ((videoId: String) -> Int?)? = null
 ) : RecyclerView.Adapter<VideosRowAdapter.VideoVH>() {
 
     private var focusedIndex: Int = 0
@@ -63,6 +64,10 @@ class VideosRowAdapter(
             }
         }
 
+        // Continue Watching progress overlay
+        val pct = progressPercentForVideoId?.invoke(video.id)
+        holder.bindProgressPercent(pct)
+
         holder.applyFocused(position == focusedIndex && holder.itemView.hasFocus())
     }
 
@@ -78,6 +83,10 @@ class VideosRowAdapter(
         val title: TextView = itemView.findViewById(R.id.card_title)
         private val overlay: View = itemView.findViewById(R.id.card_focus_overlay)
 
+        private val progressContainer: View = itemView.findViewById(R.id.card_progress_container)
+        private val progressFill: View = itemView.findViewById(R.id.card_progress_fill)
+        private val progressRest: View = itemView.findViewById(R.id.card_progress_rest)
+
         fun applyFocused(focused: Boolean) {
             if (focused) {
                 val drawable = GradientDrawable()
@@ -91,6 +100,25 @@ class VideosRowAdapter(
                 overlay.background = null
                 overlay.alpha = 0f
             }
+        }
+
+        fun bindProgressPercent(percent: Int?) {
+            if (percent == null) {
+                progressContainer.visibility = View.GONE
+                return
+            }
+
+            val pct = percent.coerceIn(0, 100)
+            // We use weights to represent fill/rest portions (no need to know exact width).
+            val fillParams = progressFill.layoutParams as? android.widget.LinearLayout.LayoutParams
+            val restParams = progressRest.layoutParams as? android.widget.LinearLayout.LayoutParams
+            if (fillParams != null && restParams != null) {
+                fillParams.weight = pct.toFloat()
+                restParams.weight = (100 - pct).toFloat()
+                progressFill.layoutParams = fillParams
+                progressRest.layoutParams = restParams
+            }
+            progressContainer.visibility = View.VISIBLE
         }
     }
 }

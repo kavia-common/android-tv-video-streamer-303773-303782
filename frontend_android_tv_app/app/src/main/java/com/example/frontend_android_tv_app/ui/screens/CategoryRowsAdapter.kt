@@ -12,7 +12,8 @@ import com.example.frontend_android_tv_app.data.Video
 class CategoryRowsAdapter(
     private val categories: List<String>,
     private val videosForCategory: (String) -> List<Video>,
-    private val onVideoSelected: (Video) -> Unit
+    private val onVideoSelected: (Video) -> Unit,
+    private val progressPercentForVideoId: ((videoId: String) -> Int?)? = null
 ) : RecyclerView.Adapter<CategoryRowsAdapter.RowVH>() {
 
     private val rowAdapters = mutableMapOf<Int, VideosRowAdapter>()
@@ -31,7 +32,8 @@ class CategoryRowsAdapter(
 
         val adapter = VideosRowAdapter(
             videos = videosForCategory(category),
-            onVideoSelected = onVideoSelected
+            onVideoSelected = onVideoSelected,
+            progressPercentForVideoId = progressPercentForVideoId
         )
 
         rowAdapters[position] = adapter

@@ -38,6 +38,13 @@ class MainActivity : FragmentActivity(),
             .commit()
     }
 
+    override fun playVideo(video: Video, resumePositionMs: Long) {
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.screen_container, PlayerFragment.newInstance(video, resumePositionMs))
+            .addToBackStack("player")
+            .commit()
+    }
+
     override fun playVideo(video: Video) {
         supportFragmentManager.beginTransaction()
             .replace(R.id.screen_container, PlayerFragment.newInstance(video))
