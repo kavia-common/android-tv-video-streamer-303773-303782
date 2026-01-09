@@ -1,0 +1,4 @@
+{
+    "command": "./gradlew test",
+    "working_directory": "/home/kavia/workspace/code-generation/android-tv-video-streamer-303773-303782/frontend_android_tv_app"
+}

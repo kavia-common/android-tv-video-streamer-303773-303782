@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">frontend_android_tv_app</string>
+    
+    <!-- Rating Screen Strings -->
+    <string name="rating_title">Did you like it?</string>
+    <string name="rating_message">Your vote helps us recommend more content like this.</string>
+    <string name="rating_like">I like it</string>
+    <string name="rating_love">I love it</string>
+    <string name="rating_dislike">I don\'t like it</string>
+    <string name="rating_close">Close</string>
+    <string name="rating_countdown">Closing in %d seconds</string>
+</resources>
