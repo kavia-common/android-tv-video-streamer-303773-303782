@@ -2,42 +2,56 @@ package com.example.frontend_android_tv_app
 
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
-import android.view.KeyEvent
-import android.widget.TextView
+import com.example.frontend_android_tv_app.data.Video
+import com.example.frontend_android_tv_app.ui.screens.HomeFragment
+import com.example.frontend_android_tv_app.ui.screens.PlayerFragment
+import com.example.frontend_android_tv_app.ui.screens.VideoDetailsFragment
 
 /**
- * Main Activity for Android TV
- * Extends FragmentActivity for Leanback compatibility
+ * Main Activity for Android TV app.
+ *
+ * Hosts 3 internal screens (Fragments):
+ * - Home: browse category rows and thumbnails
+ * - VideoDetails: show metadata and a Play button
+ * - Player: video playback with DPAD controls + overlay
  */
-class MainActivity : FragmentActivity() {
-
-    private lateinit var titleText: TextView
+class MainActivity : FragmentActivity(),
+    HomeFragment.Host,
+    VideoDetailsFragment.Host,
+    PlayerFragment.Host {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        
-        titleText = findViewById(R.id.title_text)
-        titleText.text = "frontend_android_tv_app"
-        
-        // TODO: Initialize your rating screen components here
-        // setupRatingOverlay()
+
+        if (savedInstanceState == null) {
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.screen_container, HomeFragment())
+                .commit()
+        }
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Handle TV remote control inputs
-        return when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_CENTER,
-            KeyEvent.KEYCODE_ENTER -> {
-                // Handle SELECT/OK button
-                true
-            }
-            KeyEvent.KEYCODE_BACK -> {
-                // Handle BACK button
-                finish()
-                true
-            }
-            else -> super.onKeyDown(keyCode, event)
+    override fun openDetails(video: Video) {
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.screen_container, VideoDetailsFragment.newInstance(video))
+            .addToBackStack("details")
+            .commit()
+    }
+
+    override fun playVideo(video: Video) {
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.screen_container, PlayerFragment.newInstance(video))
+            .addToBackStack("player")
+            .commit()
+    }
+
+    override fun goBack() {
+        if (!supportFragmentManager.popBackStackImmediate()) {
+            finish()
         }
+    }
+
+    override fun onBackPressed() {
+        goBack()
     }
 }

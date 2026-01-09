@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/details_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F9FAFB">
+
+    <TextView
+        android:id="@+id/details_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Video Title"
+        android:textStyle="bold"
+        android:textSize="28sp"
+        android:textColor="#111827"
+        android:paddingBottom="12dp"/>
+
+    <TextView
+        android:id="@+id/details_description"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Description"
+        android:textSize="16sp"
+        android:textColor="#64748B"
+        android:lineSpacingExtra="4dp"
+        android:paddingBottom="24dp"/>
+
+    <Button
+        android:id="@+id/details_play_button"
+        android:layout_width="240dp"
+        android:layout_height="56dp"
+        android:text="Play"
+        android:textAllCaps="false"
+        android:focusable="true"
+        android:focusableInTouchMode="true"/>
+
+    <TextView
+        android:id="@+id/details_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Tip: Press Back to return"
+        android:textSize="14sp"
+        android:textColor="#64748B"
+        android:paddingTop="18dp"/>
+
+</LinearLayout>
