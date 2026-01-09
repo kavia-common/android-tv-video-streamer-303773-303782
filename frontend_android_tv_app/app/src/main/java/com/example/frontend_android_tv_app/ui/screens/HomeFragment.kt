@@ -36,6 +36,15 @@ class HomeFragment : Fragment() {
     interface Host {
         fun openDetails(video: Video)
         fun playVideo(video: Video, resumePositionMs: Long)
+
+        // PUBLIC_INTERFACE
+        fun playVideoWithContext(
+            video: Video,
+            resumePositionMs: Long,
+            rowKey: String,
+            rowVideoIds: ArrayList<String>,
+            currentIndex: Int
+        )
     }
 
     private lateinit var rowsRecycler: RecyclerView
@@ -121,12 +130,24 @@ class HomeFragment : Fragment() {
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                     val selected = getSelectedVideo(focusManager.rowIndex, focusManager.colIndex)
                     if (selected != null) {
+                        val rowKey = getRowKey(focusManager.rowIndex)
+                        val rowList = getVideosForRow(focusManager.rowIndex)
+                        val ids = ArrayList(rowList.map { it.id })
+                        val idx = focusManager.colIndex.coerceIn(0, (rowList.size - 1).coerceAtLeast(0))
+
                         if (isContinueWatchingRow(focusManager.rowIndex)) {
                             val p = progressStore.getProgress(selected.id)
                             val resumePos = p?.positionMs ?: 0L
-                            (activity as? Host)?.playVideo(selected, resumePos)
+                            (activity as? Host)?.playVideoWithContext(
+                                video = selected,
+                                resumePositionMs = resumePos,
+                                rowKey = PlayerFragment.ROWKEY_CONTINUE_WATCHING,
+                                rowVideoIds = ids,
+                                currentIndex = idx
+                            )
                         } else {
-                            // Favorites row uses the same "open details" behavior.
+                            // For non-continue-watching rows, keep current behavior (details) to match UX.
+                            // Autoplay context will be passed from details when play is pressed.
                             (activity as? Host)?.openDetails(selected)
                         }
                         true
@@ -178,7 +199,15 @@ class HomeFragment : Fragment() {
                 // Default click behavior for cards: details, except continue-watching should resume.
                 if (continueWatching.any { it.video.id == video.id }) {
                     val p = progressStore.getProgress(video.id)
-                    (activity as? Host)?.playVideo(video, p?.positionMs ?: 0L)
+                    val rowList = continueWatching.map { it.video }
+                    val idx = rowList.indexOfFirst { it.id == video.id }.coerceAtLeast(0)
+                    (activity as? Host)?.playVideoWithContext(
+                        video = video,
+                        resumePositionMs = p?.positionMs ?: 0L,
+                        rowKey = PlayerFragment.ROWKEY_CONTINUE_WATCHING,
+                        rowVideoIds = ArrayList(rowList.map { it.id }),
+                        currentIndex = idx
+                    )
                 } else {
                     (activity as? Host)?.openDetails(video)
                 }
@@ -231,6 +260,15 @@ class HomeFragment : Fragment() {
 
     private fun isContinueWatchingRow(rowIndex: Int): Boolean {
         return categoriesForUi.getOrNull(rowIndex) == CONTINUE_WATCHING_LABEL
+    }
+
+    private fun getRowKey(rowIndex: Int): String {
+        val cat = categoriesForUi.getOrNull(rowIndex) ?: return ""
+        return when (cat) {
+            CONTINUE_WATCHING_LABEL -> PlayerFragment.ROWKEY_CONTINUE_WATCHING
+            FAVORITES_LABEL -> PlayerFragment.ROWKEY_FAVORITES
+            else -> cat
+        }
     }
 
     companion object {

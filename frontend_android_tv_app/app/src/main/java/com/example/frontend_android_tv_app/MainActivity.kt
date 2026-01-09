@@ -52,6 +52,28 @@ class MainActivity : FragmentActivity(),
             .commit()
     }
 
+    override fun playVideoWithContext(
+        video: Video,
+        resumePositionMs: Long,
+        rowKey: String,
+        rowVideoIds: ArrayList<String>,
+        currentIndex: Int
+    ) {
+        supportFragmentManager.beginTransaction()
+            .replace(
+                R.id.screen_container,
+                PlayerFragment.newInstanceWithContext(
+                    video = video,
+                    resumePositionMs = resumePositionMs,
+                    rowKey = rowKey,
+                    rowVideoIds = rowVideoIds,
+                    currentIndex = currentIndex
+                )
+            )
+            .addToBackStack("player")
+            .commit()
+    }
+
     override fun goBack() {
         if (!supportFragmentManager.popBackStackImmediate()) {
             finish()

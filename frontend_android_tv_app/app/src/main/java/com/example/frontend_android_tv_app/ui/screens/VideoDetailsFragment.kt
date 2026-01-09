@@ -14,6 +14,7 @@ import com.example.frontend_android_tv_app.data.FavoritesStore
 import com.example.frontend_android_tv_app.data.ProgressStore
 import com.example.frontend_android_tv_app.data.Video
 import com.example.frontend_android_tv_app.data.VideoParcelable
+import com.example.frontend_android_tv_app.data.VideosRepository
 import com.example.frontend_android_tv_app.data.toParcelable
 import com.example.frontend_android_tv_app.data.toVideo
 import kotlinx.coroutines.Job
@@ -29,6 +30,16 @@ class VideoDetailsFragment : Fragment() {
     interface Host {
         fun playVideo(video: Video)
         fun playVideo(video: Video, resumePositionMs: Long)
+
+        // PUBLIC_INTERFACE
+        fun playVideoWithContext(
+            video: Video,
+            resumePositionMs: Long,
+            rowKey: String,
+            rowVideoIds: ArrayList<String>,
+            currentIndex: Int
+        )
+
         fun goBack()
     }
 
@@ -74,8 +85,18 @@ class VideoDetailsFragment : Fragment() {
         titleText.text = video.title
         descText.text = video.description
 
+        val rowList = VideosRepository.videosForCategory(video.category)
+        val ids = ArrayList(rowList.map { it.id })
+        val idx = rowList.indexOfFirst { it.id == video.id }.let { if (it >= 0) it else 0 }
+
         playButton.setOnClickListener {
-            (activity as? Host)?.playVideo(video)
+            (activity as? Host)?.playVideoWithContext(
+                video = video,
+                resumePositionMs = 0L,
+                rowKey = video.category,
+                rowVideoIds = ids,
+                currentIndex = idx
+            )
         }
 
         favoriteButton.setOnClickListener {
@@ -93,7 +114,13 @@ class VideoDetailsFragment : Fragment() {
 
             resumeButton.visibility = View.VISIBLE
             resumeButton.setOnClickListener {
-                (activity as? Host)?.playVideo(video, progress.positionMs)
+                (activity as? Host)?.playVideoWithContext(
+                    video = video,
+                    resumePositionMs = progress.positionMs,
+                    rowKey = video.category,
+                    rowVideoIds = ids,
+                    currentIndex = idx
+                )
             }
 
             // Focus Resume by default when applicable.
@@ -108,8 +135,8 @@ class VideoDetailsFragment : Fragment() {
         // Keep favorite button label in sync with current favorite state.
         favoritesCollectJob?.cancel()
         favoritesCollectJob = viewLifecycleOwner.lifecycleScope.launch {
-            favoritesStore.favoritesFlow().collectLatest { ids ->
-                val isFav = ids.contains(video.id)
+            favoritesStore.favoritesFlow().collectLatest { favIds ->
+                val isFav = favIds.contains(video.id)
                 favoriteButton.text = if (isFav) "Remove from Favorites" else "Add to Favorites"
             }
         }
