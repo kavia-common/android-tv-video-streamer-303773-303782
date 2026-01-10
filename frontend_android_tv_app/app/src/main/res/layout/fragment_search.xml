@@ -43,7 +43,8 @@
                 android:textSize="26sp"
                 android:textStyle="bold"
                 android:textColor="#111827"
-                android:paddingBottom="10dp" />
+                android:paddingBottom="10dp"
+                android:accessibilityLiveRegion="polite" />
 
             <TextView
                 android:id="@+id/search_hint_text"

@@ -36,7 +36,8 @@
             android:text="Search"
             android:textAllCaps="false"
             android:focusable="true"
-            android:focusableInTouchMode="true" />
+            android:focusableInTouchMode="true"
+            android:contentDescription="@string/a11y_search" />
 
     </LinearLayout>
 

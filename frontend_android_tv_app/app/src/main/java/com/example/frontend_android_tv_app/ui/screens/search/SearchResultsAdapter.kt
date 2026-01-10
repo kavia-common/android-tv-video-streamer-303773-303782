@@ -1,7 +1,9 @@
 package com.example.frontend_android_tv_app.ui.screens.search
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.recyclerview.widget.RecyclerView
 import com.example.frontend_android_tv_app.R
 import com.example.frontend_android_tv_app.data.Video
@@ -29,23 +31,42 @@ class SearchResultsAdapter(
 
     override fun onBindViewHolder(holder: VideosRowAdapter.VideoVH, position: Int) {
         val video = videos[position]
-        // Reuse the same binding logic pattern from VideosRowAdapter:
-        // - title + thumbnail
-        // - favorite + progress overlays
-        // - focus ring
-        // We cannot call VideosRowAdapter.onBind directly, so we replicate minimal bind here by
-        // instantiating a helper adapter for focus/animations? That would be heavy.
-        //
-        // Instead, we implement a simple binding by leveraging the holder's public methods.
-        // We still need to set thumbnail and title; those fields are public in VideoVH.
+
         holder.title.text = video.title
         com.bumptech.glide.Glide.with(holder.thumbnail)
             .load(video.thumbnailUrl)
             .centerCrop()
             .into(holder.thumbnail)
 
-        holder.bindFavorite(isFavorite?.invoke(video.id) == true)
-        holder.bindProgressPercent(progressPercentForVideoId?.invoke(video.id))
+        val fav = isFavorite?.invoke(video.id) == true
+        val pct = progressPercentForVideoId?.invoke(video.id)
+
+        holder.bindFavorite(fav)
+        holder.bindProgressPercent(pct)
+
+        // Accessibility: ensure card root has a full description similar to Home cards.
+        // Search results don't have a single "row category", so we use the video's own category.
+        val ctx = holder.itemView.context
+        val pctText = pct?.coerceIn(0, 100)?.let { ctx.getString(R.string.a11y_percent_watched, it) }
+        val favText = if (fav) ctx.getString(R.string.a11y_favorited) else null
+        holder.itemView.contentDescription = when {
+            fav && pctText != null ->
+                ctx.getString(R.string.a11y_video_card_favorited_progress, video.title, video.category, favText, pctText)
+            fav ->
+                ctx.getString(R.string.a11y_video_card_favorited, video.title, video.category, favText)
+            pctText != null ->
+                ctx.getString(R.string.a11y_video_card_progress, video.title, video.category, pctText)
+            else ->
+                ctx.getString(R.string.a11y_video_card, video.title, video.category)
+        }
+
+        // Treat as actionable.
+        holder.itemView.accessibilityDelegate = object : View.AccessibilityDelegate() {
+            override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
+                super.onInitializeAccessibilityNodeInfo(host, info)
+                info.className = "android.widget.Button"
+            }
+        }
 
         holder.itemView.setOnClickListener { onVideoSelected(video) }
         holder.itemView.setOnKeyListener { _, keyCode, event ->

@@ -94,6 +94,11 @@ class VideoDetailsFragment : Fragment() {
         titleText.text = video.title
         descText.text = video.description
 
+        // Accessibility: title/description should be read in order; description is read-only text.
+        // (No need to make it focusable; TalkBack will read it when navigating the screen.)
+        descText.isFocusable = false
+        descText.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+
         // Subtitles button: show only if there are local tracks for this video.
         val tracks = SubtitlesRepository.tracksForVideo(video.id)
         if (tracks.isEmpty()) {
@@ -118,6 +123,7 @@ class VideoDetailsFragment : Fragment() {
                 currentIndex = idx
             )
         }
+        playButton.contentDescription = getString(R.string.a11y_play)
 
         favoriteButton.setOnClickListener {
             favoritesStore.toggleFavorite(video.id)
@@ -129,10 +135,12 @@ class VideoDetailsFragment : Fragment() {
 
         if (canResume) {
             val remainingMs = (progress!!.durationMs - progress.positionMs).coerceAtLeast(0L)
-            resumeHint.text = "Resume • ${formatTime(remainingMs)} remaining"
+            val remainingStr = formatTime(remainingMs)
+            resumeHint.text = "Resume • ${remainingStr} remaining"
             resumeHint.visibility = View.VISIBLE
 
             resumeButton.visibility = View.VISIBLE
+            resumeButton.contentDescription = getString(R.string.a11y_resume_with_remaining, remainingStr)
             resumeButton.setOnClickListener {
                 (activity as? Host)?.playVideoWithContext(
                     video = video,
@@ -152,12 +160,17 @@ class VideoDetailsFragment : Fragment() {
             playButton.post { playButton.requestFocus() }
         }
 
-        // Keep favorite button label in sync with current favorite state.
+        // Keep favorite button label and accessibility state in sync with current favorite state.
         favoritesCollectJob?.cancel()
         favoritesCollectJob = viewLifecycleOwner.lifecycleScope.launch {
             favoritesStore.favoritesFlow().collectLatest { favIds ->
                 val isFav = favIds.contains(video.id)
                 favoriteButton.text = if (isFav) "Remove from Favorites" else "Add to Favorites"
+                favoriteButton.contentDescription = if (isFav) {
+                    getString(R.string.a11y_remove_from_favorites)
+                } else {
+                    getString(R.string.a11y_add_to_favorites)
+                }
             }
         }
 

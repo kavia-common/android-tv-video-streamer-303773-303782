@@ -251,7 +251,13 @@ class SearchFragment : Fragment() {
     }
 
     private fun renderQuery() {
-        queryText.text = if (query.isBlank()) "Search…" else query
+        val display = if (query.isBlank()) "Search…" else query
+        queryText.text = display
+
+        // Accessibility: keep contentDescription in sync and let TalkBack announce changes
+        // via the polite live region set in the XML.
+        val spoken = if (query.isBlank()) "" else query
+        queryText.contentDescription = getString(R.string.a11y_search_query, spoken)
     }
 
     private fun updateResults() {

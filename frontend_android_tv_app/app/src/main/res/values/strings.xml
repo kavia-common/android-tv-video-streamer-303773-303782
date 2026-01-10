@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">frontend_android_tv_app</string>
-    
+
     <!-- Rating Screen Strings -->
     <string name="rating_title">Did you like it?</string>
     <string name="rating_message">Your vote helps us recommend more content like this.</string>
@@ -10,4 +10,44 @@
     <string name="rating_dislike">I don\'t like it</string>
     <string name="rating_close">Close</string>
     <string name="rating_countdown">Closing in %d seconds</string>
+
+    <!-- Accessibility / TalkBack strings -->
+    <string name="a11y_search">Search</string>
+    <string name="a11y_category_row_header">Category: %1$s</string>
+
+    <string name="a11y_favorited">favorited</string>
+    <string name="a11y_percent_watched">%1$d percent watched</string>
+
+    <string name="a11y_video_card">%1$s, %2$s</string>
+    <string name="a11y_video_card_favorited">%1$s, %2$s, %3$s</string>
+    <string name="a11y_video_card_progress">%1$s, %2$s, %3$s</string>
+    <string name="a11y_video_card_favorited_progress">%1$s, %2$s, %3$s, %4$s</string>
+
+    <string name="a11y_keyboard_key_letter">Letter %1$s</string>
+    <string name="a11y_keyboard_space">Space</string>
+    <string name="a11y_keyboard_backspace">Backspace</string>
+    <string name="a11y_keyboard_clear">Clear</string>
+    <string name="a11y_keyboard_done">Done</string>
+
+    <string name="a11y_search_query">Search query: %1$s</string>
+
+    <string name="a11y_play">Play</string>
+    <string name="a11y_pause">Pause</string>
+    <string name="a11y_seek_backward_10">Rewind 10 seconds</string>
+    <string name="a11y_seek_forward_10">Forward 10 seconds</string>
+
+    <string name="a11y_mute">Mute</string>
+    <string name="a11y_unmute">Unmute</string>
+
+    <string name="a11y_seekbar_time">Playback position %1$s of %2$s</string>
+
+    <string name="a11y_resume_with_remaining">Resume, %1$s remaining</string>
+
+    <string name="a11y_add_to_favorites">Add to favorites</string>
+    <string name="a11y_remove_from_favorites">Remove from favorites</string>
+
+    <string name="a11y_next_up_panel">Next up panel</string>
+    <string name="a11y_next_up_in_seconds">Next up: %1$s in %2$d seconds</string>
+    <string name="a11y_play_now">Play now</string>
+    <string name="a11y_cancel">Cancel</string>
 </resources>

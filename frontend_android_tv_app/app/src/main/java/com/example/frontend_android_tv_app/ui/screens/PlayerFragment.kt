@@ -14,9 +14,11 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.ListView
 import android.widget.ProgressBar
+import android.view.accessibility.AccessibilityEvent
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.core.view.isVisible
+import androidx.core.view.ViewCompat
 import androidx.fragment.app.Fragment
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -188,6 +190,20 @@ class PlayerFragment : Fragment() {
 
         titleText.text = video.title
 
+        // Accessibility: static control descriptions (dynamic labels updated elsewhere).
+        btnBack.contentDescription = getString(R.string.a11y_cancel) // Back acts like exit from player
+        btnRewind.contentDescription = getString(R.string.a11y_seek_backward_10)
+        btnForward.contentDescription = getString(R.string.a11y_seek_forward_10)
+        // btnPlayPause contentDescription set in updatePlayPauseLabel()
+        // btnMute contentDescription set in toggleMute()/updateVolumeText
+
+        // Next Up panel: make countdown a polite live region and give panel an overall label.
+        nextUpOverlay.contentDescription = getString(R.string.a11y_next_up_panel)
+        ViewCompat.setAccessibilityLiveRegion(nextUpCountdownText, ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE)
+
+        btnNextUpPlayNow.contentDescription = getString(R.string.a11y_play_now)
+        btnNextUpCancel.contentDescription = getString(R.string.a11y_cancel)
+
         btnBack.setOnClickListener {
             cancelAutoplay("back pressed")
             (activity as? Host)?.goBack()
@@ -226,6 +242,13 @@ class PlayerFragment : Fragment() {
                 showOverlayTemporarily()
             }
         })
+
+        // Accessibility: when the seekbar is focused, speak "position of duration".
+        progressBar.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                updateSeekbarA11y()
+            }
+        }
 
         autoplayCoordinator.setListener(object : AutoplayCoordinator.Listener {
             override fun onStateChanged(state: AutoplayCoordinator.State) {
@@ -504,7 +527,13 @@ class PlayerFragment : Fragment() {
 
     private fun updatePlayPauseLabel() {
         val p = player ?: return
-        btnPlayPause.text = if (p.isPlaying) "Pause" else "Play"
+        val isPlaying = p.isPlaying
+        btnPlayPause.text = if (isPlaying) "Pause" else "Play"
+        btnPlayPause.contentDescription = if (isPlaying) {
+            getString(R.string.a11y_pause)
+        } else {
+            getString(R.string.a11y_play)
+        }
     }
 
     private fun seekBy(deltaMs: Long) {
@@ -538,9 +567,11 @@ class PlayerFragment : Fragment() {
             lastVolume = p.volume
             p.volume = 0f
             btnMute.text = "Unmute"
+            btnMute.contentDescription = getString(R.string.a11y_unmute)
         } else {
             p.volume = lastVolume.coerceAtLeast(0.1f)
             btnMute.text = "Mute"
+            btnMute.contentDescription = getString(R.string.a11y_mute)
         }
         updateVolumeText()
         showOverlayTemporarily()
@@ -567,6 +598,9 @@ class PlayerFragment : Fragment() {
         } else {
             progressBar.progress = 0
         }
+
+        // Accessibility: keep seekbar description current for TalkBack focus.
+        updateSeekbarA11y()
     }
 
     private fun formatTime(ms: Long): String {
@@ -658,9 +692,12 @@ class PlayerFragment : Fragment() {
         }
     }
 
+    private var lastAnnouncedNextUpSeconds: Int = -1
+
     private fun renderNextUpState(state: AutoplayCoordinator.State) {
         if (!state.visible) {
             hideNextUpOverlay()
+            lastAnnouncedNextUpSeconds = -1
             return
         }
 
@@ -674,6 +711,11 @@ class PlayerFragment : Fragment() {
             nextUpProgress.progress = 0
             btnNextUpPlayNow.text = "Replay"
             btnNextUpCancel.text = "Cancel"
+
+            // Accessibility: panel announcement for replay mode (single shot).
+            nextUpCountdownText.contentDescription =
+                getString(R.string.a11y_next_up_in_seconds, video.title, 0)
+
             // Use current video thumb as preview (best available).
             Glide.with(nextUpThumb)
                 .load(video.thumbnailUrl)
@@ -702,6 +744,14 @@ class PlayerFragment : Fragment() {
         val fraction = (state.remainingMs.toDouble() / state.totalMs.toDouble()).coerceIn(0.0, 1.0)
         nextUpProgress.progress = (fraction * 1000).roundToInt()
 
+        // Accessibility: announce "Next up: <title> in N seconds" on second changes.
+        if (secLeft != lastAnnouncedNextUpSeconds) {
+            lastAnnouncedNextUpSeconds = secLeft
+            val announcement = getString(R.string.a11y_next_up_in_seconds, next.video.title, secLeft)
+            nextUpCountdownText.contentDescription = announcement
+            nextUpCountdownText.sendAccessibilityEvent(AccessibilityEvent.TYPE_ANNOUNCEMENT)
+        }
+
         btnNextUpPlayNow.text = "Play Now"
         btnNextUpCancel.text = "Cancel"
         btnNextUpPlayNow.setOnClickListener { autoplayCoordinator.playNow() }
@@ -715,6 +765,15 @@ class PlayerFragment : Fragment() {
 
         // Prefer focusing primary action.
         btnNextUpPlayNow.post { btnNextUpPlayNow.requestFocus() }
+    }
+
+    private fun updateSeekbarA11y() {
+        val p = player ?: return
+        val dur = p.duration
+        if (dur <= 0L) return
+        val posStr = formatTime(p.currentPosition)
+        val durStr = formatTime(dur)
+        progressBar.contentDescription = getString(R.string.a11y_seekbar_time, posStr, durStr)
     }
 
     private fun hideNextUpOverlay() {

@@ -28,12 +28,17 @@ class CategoryRowsAdapter(
         val category = categories[position]
         holder.title.text = category
 
+        // Accessibility: announce row header as a descriptive label.
+        holder.title.contentDescription =
+            holder.itemView.context.getString(R.string.a11y_category_row_header, category)
+
         holder.rowList.layoutManager = LinearLayoutManager(holder.itemView.context, RecyclerView.HORIZONTAL, false)
         holder.rowList.isFocusable = false // focus on child cards, not the nested RV itself
 
         val adapter = VideosRowAdapter(
             videos = videosForCategory(category),
             onVideoSelected = onVideoSelected,
+            categoryForA11y = category,
             progressPercentForVideoId = progressPercentForVideoId,
             isFavorite = isFavorite
         )

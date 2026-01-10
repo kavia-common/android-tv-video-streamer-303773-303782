@@ -5,6 +5,7 @@ import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
@@ -16,6 +17,7 @@ import com.example.frontend_android_tv_app.ui.Theme
 class VideosRowAdapter(
     private val videos: List<Video>,
     private val onVideoSelected: (Video) -> Unit,
+    private val categoryForA11y: String,
     private val progressPercentForVideoId: ((videoId: String) -> Int?)? = null,
     private val isFavorite: ((videoId: String) -> Boolean)? = null
 ) : RecyclerView.Adapter<VideosRowAdapter.VideoVH>() {
@@ -36,6 +38,23 @@ class VideosRowAdapter(
             .load(video.thumbnailUrl)
             .centerCrop()
             .into(holder.thumbnail)
+
+        // Favorites overlay
+        val fav = isFavorite?.invoke(video.id) == true
+        holder.bindFavorite(fav)
+
+        // Continue Watching progress overlay
+        val pct = progressPercentForVideoId?.invoke(video.id)
+        holder.bindProgressPercent(pct)
+
+        // Accessibility: make the entire card speak as one actionable item.
+        // Include title + category and append favorited / percent watched when present.
+        holder.bindA11y(
+            title = video.title,
+            category = categoryForA11y,
+            isFavorite = fav,
+            progressPercent = pct
+        )
 
         // Update focus visuals without relying on the potentially-stale `position` later.
         holder.itemView.setOnFocusChangeListener { _, hasFocus ->
@@ -68,14 +87,6 @@ class VideosRowAdapter(
             }
         }
 
-        // Favorites overlay
-        val fav = isFavorite?.invoke(video.id) == true
-        holder.bindFavorite(fav)
-
-        // Continue Watching progress overlay
-        val pct = progressPercentForVideoId?.invoke(video.id)
-        holder.bindProgressPercent(pct)
-
         holder.applyFocused(position == focusedIndex && holder.itemView.hasFocus())
     }
 
@@ -96,6 +107,21 @@ class VideosRowAdapter(
         private val progressContainer: View = itemView.findViewById(R.id.card_progress_container)
         private val progressFill: View = itemView.findViewById(R.id.card_progress_fill)
         private val progressRest: View = itemView.findViewById(R.id.card_progress_rest)
+
+        init {
+            // Decorative elements should not be separately focusable/announced.
+            favoriteBadge.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            favoriteBadge.contentDescription = null
+            progressContainer.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            progressContainer.contentDescription = null
+
+            // The thumbnail is decorative because the card root describes the video.
+            thumbnail.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            thumbnail.contentDescription = null
+
+            // Card title is read as part of the card root contentDescription.
+            title.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
 
         fun applyFocused(focused: Boolean) {
             if (focused) {
@@ -133,6 +159,33 @@ class VideosRowAdapter(
                 progressRest.layoutParams = restParams
             }
             progressContainer.visibility = View.VISIBLE
+        }
+
+        fun bindA11y(title: String, category: String, isFavorite: Boolean, progressPercent: Int?) {
+            val ctx = itemView.context
+            val pct = progressPercent?.coerceIn(0, 100)
+
+            val pctText = if (pct != null) ctx.getString(R.string.a11y_percent_watched, pct) else null
+            val favText = if (isFavorite) ctx.getString(R.string.a11y_favorited) else null
+
+            itemView.contentDescription = when {
+                isFavorite && pctText != null ->
+                    ctx.getString(R.string.a11y_video_card_favorited_progress, title, category, favText, pctText)
+                isFavorite ->
+                    ctx.getString(R.string.a11y_video_card_favorited, title, category, favText)
+                pctText != null ->
+                    ctx.getString(R.string.a11y_video_card_progress, title, category, pctText)
+                else ->
+                    ctx.getString(R.string.a11y_video_card, title, category)
+            }
+
+            // Ensure TalkBack treats this as a button-like actionable item.
+            itemView.accessibilityDelegate = object : View.AccessibilityDelegate() {
+                override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
+                    super.onInitializeAccessibilityNodeInfo(host, info)
+                    info.className = "android.widget.Button"
+                }
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.example.frontend_android_tv_app.R
@@ -55,9 +56,31 @@ class KeyboardAdapter(
         private val focusOverlay: View = itemView.findViewById(R.id.key_focus_overlay)
 
         fun bind(key: KeyboardKey) {
+            val ctx = itemView.context
             label.text = when (key) {
                 is KeyboardKey.CharKey -> key.c.toString()
                 is KeyboardKey.TextKey -> key.label
+            }
+
+            // Accessibility: concise but explicit descriptions for on-screen keyboard keys.
+            itemView.contentDescription = when (key) {
+                is KeyboardKey.CharKey ->
+                    ctx.getString(R.string.a11y_keyboard_key_letter, key.c.toString())
+
+                is KeyboardKey.TextKey -> when (key.action) {
+                    KeyboardKey.Action.SPACE -> ctx.getString(R.string.a11y_keyboard_space)
+                    KeyboardKey.Action.BACKSPACE -> ctx.getString(R.string.a11y_keyboard_backspace)
+                    KeyboardKey.Action.CLEAR -> ctx.getString(R.string.a11y_keyboard_clear)
+                    KeyboardKey.Action.DONE -> ctx.getString(R.string.a11y_keyboard_done)
+                }
+            }
+
+            // Ensure TalkBack treats as a button.
+            itemView.accessibilityDelegate = object : View.AccessibilityDelegate() {
+                override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
+                    super.onInitializeAccessibilityNodeInfo(host, info)
+                    info.className = "android.widget.Button"
+                }
             }
         }
 
